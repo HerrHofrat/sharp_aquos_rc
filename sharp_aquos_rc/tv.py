@@ -2,8 +2,8 @@
 import socket
 import time
 import pkgutil
-import yaml
 import logging
+import yaml
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ class TV(object):
 
     def __init__(self, ip, port, username, password,  # pylint: disable=R0913
                  timeout=5, connection_timeout=2, command_map='us'):
+        logging.basicConfig(level=logging.DEBUG)
         self.ip_address = ip
         self.port = port
         self.auth = str.encode(username + '\r' + password + '\r')
@@ -36,7 +37,7 @@ class TV(object):
             raise ValueError("command_layout should be one of %s, not %s" % (str(self._VALID_COMMAND_MAPS), command_map))
 
         stream = pkgutil.get_data("sharp_aquos_rc", "commands/%s.yaml" %command_map)
-        self.command = yaml.full_load(stream)
+        self.command = yaml.safe_load(stream)
 
     def _send_command_raw(self, command, opt=''):
         """
@@ -59,6 +60,7 @@ class TV(object):
         # Page 58 - Communication conditions for IP
         # The connection could be lost (but not only after 3 minutes),
         # so we need to the remote commands to be sure about states
+        status=""
         end_time = time.time() + self.timeout
         while time.time() < end_time:
             try:
@@ -97,7 +99,10 @@ class TV(object):
                     try:
                         return int(status)
                     except: 
-                        continue
+                        if status:
+                            return status
+                        else:
+                            continue
                         
 
     def _check_command_name(self, name, dicitionary):
@@ -116,7 +121,17 @@ class TV(object):
                     dictionary = dictionary[val]
                 else:
                     command = dictionary[val]
-        return self._send_command_raw(command, parameter)
+        try:
+            return self._send_command_raw(command, parameter)
+        except:
+            return False
+
+    def is_available(self):
+        try:
+            self._send_command_raw(self.command['power'], "?")
+            return True
+        except:
+            return False
 
     def info(self):
         """
